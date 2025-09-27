@@ -11,11 +11,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import our services
-from services.download import download_from_gdrive
+from services.download import download_file_from_source
 from services.transcription import TranscriptionService
 from services.mapdog import MapDocService
 from services.audio_service import process_audio_file, get_audio_duration
-from utils.file_utils import clean_filename, get_base_filename, is_audio_file, is_video_file
+from utils.file_utils import clean_filename, get_base_filename, is_audio_file, is_video_file, detect_file_source
 
 def main():
     """Main entry point"""
@@ -34,10 +34,10 @@ def main():
         print("❌ GEMINI_API_KEY not found in .env file")
         return
 
-    # Get Google Drive URL from user
-    gdrive_url = input("Enter Google Drive public URL: ").strip()
+    # Get URL from user (supports multiple cloud providers)
+    file_url = input("Enter file URL (Google Drive, Dropbox, WeTransfer): ").strip()
 
-    if not gdrive_url:
+    if not file_url:
         print("❌ No URL provided. Exiting.")
         return
 
@@ -46,19 +46,25 @@ def main():
     if not episode_name:
         episode_name = "untitled_episode"
 
-    print(f"📁 Processing: {gdrive_url}")
+    print(f"📁 Processing: {file_url}")
     print(f"📝 Episode: {episode_name}")
 
     try:
         # Step 1: Download file
         clean_name = clean_filename(episode_name)
+
+        # Detect file source and download appropriately
+        source_type = detect_file_source(file_url)
+        print(f"🔍 Detected source: {source_type}")
+
+        # Determine file extension (or use generic)
         download_path = f"output/downloads/{clean_name}_source"
 
         print("\n" + "="*50)
         print("STEP 1: DOWNLOADING FILE")
         print("="*50)
 
-        downloaded_file = download_from_gdrive(gdrive_url, download_path)
+        downloaded_file = download_file_from_source(file_url, download_path, source_type)
 
         # Step 2: Audio Processing
         print("\n" + "="*50)

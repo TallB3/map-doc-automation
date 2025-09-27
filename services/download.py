@@ -1,56 +1,130 @@
 """
-Google Drive public file download service
+File download service for various cloud providers
+Copied from valuebell-transcriber with robust multi-provider support
 """
 import os
 import requests
-from urllib.parse import urlparse, parse_qs
+import gdown
+import re
+from bs4 import BeautifulSoup
 
-def extract_file_id_from_url(gdrive_url):
-    """Extract file ID from Google Drive URL"""
-    if "/file/d/" in gdrive_url:
-        # Standard sharing URL: https://drive.google.com/file/d/FILE_ID/view
-        file_id = gdrive_url.split("/file/d/")[1].split("/")[0]
-    elif "id=" in gdrive_url:
-        # Direct URL with id parameter
-        parsed = urlparse(gdrive_url)
-        file_id = parse_qs(parsed.query)["id"][0]
-    else:
-        raise ValueError("Cannot extract file ID from URL")
+from utils.file_utils import convert_dropbox_to_direct, handle_dropbox_transfer_with_prompt
 
-    return file_id
 
-def download_from_gdrive(gdrive_url, output_path):
-    """Download file from Google Drive public URL"""
-    print(f"📥 Downloading from Google Drive...")
+def download_from_dropbox(url, output_path):
+    """Download file from Dropbox using requests"""
+    direct_url = convert_dropbox_to_direct(url)
+    print(f"Converting Dropbox URL to direct download...")
 
-    file_id = extract_file_id_from_url(gdrive_url)
-    download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    response = requests.get(direct_url, stream=True)
+    response.raise_for_status()
 
-    response = requests.get(download_url, stream=True)
+    total_size = int(response.headers.get('content-length', 0))
+    downloaded_size = 0
 
-    # Handle large files that require confirmation
-    if "quota exceeded" in response.text.lower():
-        raise Exception("Google Drive quota exceeded. Try again later.")
-
-    # Check for download warning (large files)
-    if "download_warning" in response.text:
-        # Extract confirmation token
-        for line in response.text.splitlines():
-            if "confirm=" in line:
-                confirm_token = line.split("confirm=")[1].split("&")[0]
-                download_url = f"https://drive.google.com/uc?export=download&confirm={confirm_token}&id={file_id}"
-                response = requests.get(download_url, stream=True)
-                break
-
-    # Save file
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     with open(output_path, 'wb') as f:
         for chunk in response.iter_content(chunk_size=8192):
             if chunk:
                 f.write(chunk)
+                downloaded_size += len(chunk)
+                if total_size > 0:
+                    percent = (downloaded_size / total_size) * 100
+                    print(f"\rDownload progress: {percent:.1f}%", end='', flush=True)
 
-    file_size = os.path.getsize(output_path)
-    print(f"✅ Downloaded {file_size:,} bytes to {output_path}")
+    print(f"\nDownload completed: {output_path}")
 
-    return output_path
+
+def download_from_wetransfer(url, output_path):
+    """Download file from WeTransfer"""
+    print(f"Accessing WeTransfer download...")
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    })
+
+    try:
+        response = session.get(url, allow_redirects=True)
+        response.raise_for_status()
+
+        if 'wetransfer.com' not in response.url and 'we.tl' not in response.url:
+            raise ValueError("URL does not appear to be a valid WeTransfer link")
+
+        download_url = None
+        content_type = response.headers.get('content-type', '').lower()
+
+        if any(media_type in content_type for media_type in ['video/', 'audio/', 'application/octet-stream']):
+            download_url = response.url
+        else:
+            page_content = response.text
+            download_patterns = [
+                r'"(https://[^"]*\.wetransfer\.com/[^"]*download[^"]*)"',
+                r'"(https://[^"]*wetransfer[^"]*\.(mp4|avi|mov|mkv|mp3|wav|m4a)[^"]*)"',
+                r'href="([^"]*download[^"]*)"'
+            ]
+
+            for pattern in download_patterns:
+                matches = re.findall(pattern, page_content, re.IGNORECASE)
+                if matches:
+                    download_url = matches[0] if isinstance(matches[0], str) else matches[0][0]
+                    break
+
+        if not download_url:
+            download_url = response.url
+
+        download_response = session.get(download_url, stream=True)
+        download_response.raise_for_status()
+
+        content_type = download_response.headers.get('content-type', '').lower()
+        if 'text/html' in content_type:
+            raise ValueError("WeTransfer link may have expired or requires manual access.")
+
+        total_size = int(download_response.headers.get('content-length', 0))
+        downloaded_size = 0
+
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        with open(output_path, 'wb') as f:
+            for chunk in download_response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    downloaded_size += len(chunk)
+                    if total_size > 0:
+                        percent = (downloaded_size / total_size) * 100
+                        print(f"\rDownload progress: {percent:.1f}%", end='', flush=True)
+
+        print(f"\nDownload completed: {output_path}")
+
+    except Exception as e:
+        raise Exception(f"WeTransfer download failed: {e}")
+
+
+def download_file_from_source(url, output_path, source_type):
+    """Download file based on source type"""
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    if source_type == 'drive':
+        print(f"📁 Downloading from Google Drive...")
+        gdown.download(url, output_path, quiet=False, fuzzy=True)
+        return output_path
+    elif source_type == 'dropbox':
+        print(f"📁 Downloading from Dropbox...")
+        download_from_dropbox(url, output_path)
+        return output_path
+    elif source_type == 'dropbox_transfer':
+        handle_dropbox_transfer_with_prompt(url, os.path.dirname(output_path))
+    elif source_type == 'wetransfer':
+        print(f"📁 Downloading from WeTransfer...")
+        download_from_wetransfer(url, output_path)
+        return output_path
+    else:
+        raise ValueError(f"Unsupported source type: {source_type}")
+
+
+# Convenience function for backwards compatibility
+def download_from_gdrive(gdrive_url, output_path):
+    """Download file from Google Drive public URL - legacy function"""
+    from utils.file_utils import detect_file_source
+    source_type = detect_file_source(gdrive_url)
+    return download_file_from_source(gdrive_url, output_path, source_type)
