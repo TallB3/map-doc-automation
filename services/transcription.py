@@ -16,7 +16,7 @@ class TranscriptionService:
         custom_timeout = httpx.Timeout(60.0, read=900.0, connect=10.0)
         self.client = ElevenLabs(api_key=api_key, timeout=custom_timeout)
 
-    def transcribe_audio(self, audio_file_path, language_code="en", diarize=True):
+    def transcribe_audio(self, audio_file_path, language_code="en", diarize=True, num_speakers=None):
         """
         Transcribe audio file using ElevenLabs API
 
@@ -24,21 +24,32 @@ class TranscriptionService:
             audio_file_path: Path to the audio file
             language_code: Language code for transcription
             diarize: Whether to perform speaker diarization
+            num_speakers: Expected number of speakers (None for auto-detect)
 
         Returns:
             Transcription response object with text and words
         """
         print(f"🎙️ Transcribing audio with ElevenLabs...")
+        if num_speakers:
+            print(f"👥 Optimizing for {num_speakers} speakers...")
+
+        # Build API parameters
+        api_params = {
+            "file": None,  # Will be set below
+            "model_id": "scribe_v1_experimental",
+            "language_code": language_code,
+            "diarize": diarize,
+            "tag_audio_events": False,
+            "timestamps_granularity": "word"
+        }
+
+        # Add num_speakers if specified
+        if num_speakers:
+            api_params["num_speakers"] = num_speakers
 
         with open(audio_file_path, "rb") as audio_file_object:
-            response = self.client.speech_to_text.convert(
-                file=audio_file_object,
-                model_id="scribe_v1_experimental",
-                language_code=language_code,
-                diarize=diarize,
-                tag_audio_events=False,
-                timestamps_granularity="word"
-            )
+            api_params["file"] = audio_file_object
+            response = self.client.speech_to_text.convert(**api_params)
 
         return response
 
@@ -64,6 +75,126 @@ class TranscriptionService:
         response_dict = response.model_dump()
 
         return full_transcript_text, words_data, response_dict
+
+    def save_transcript_with_timestamps(self, transcript_text, words_data, output_dir, base_filename):
+        """
+        Save transcript with enhanced timestamp management (every 15 minutes)
+
+        Args:
+            transcript_text: The full transcript text
+            words_data: List of word objects with timestamps
+            output_dir: Directory to save files
+            base_filename: Base name for files
+
+        Returns:
+            tuple: (txt_path, json_path)
+        """
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Generate enhanced transcript with periodic timestamps
+        enhanced_transcript = self._generate_enhanced_transcript(words_data)
+
+        # Save enhanced TXT
+        txt_path = os.path.join(output_dir, f"{base_filename}_transcript.txt")
+        with open(txt_path, 'w', encoding='utf-8') as f:
+            f.write(self._format_transcript_header())
+            f.write(enhanced_transcript)
+
+        # Save JSON
+        json_path = os.path.join(output_dir, f"{base_filename}_raw_transcript.json")
+        transcript_data = {
+            "text": transcript_text,
+            "words": [word.model_dump() if hasattr(word, 'model_dump') else word for word in words_data],
+            "enhanced_transcript": enhanced_transcript
+        }
+
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(transcript_data, f, ensure_ascii=False, indent=2)
+
+        print(f"✅ Saved enhanced transcript to {txt_path}")
+        print(f"✅ Saved raw data to {json_path}")
+
+        return txt_path, json_path
+
+    def _generate_enhanced_transcript(self, words_data):
+        """Generate transcript with periodic timestamps every 15 minutes"""
+        if not words_data:
+            return "No transcript data available"
+
+        transcript_lines = []
+        current_speaker = None
+        current_time = None
+        current_sentence = []
+        last_forced_timestamp = 0  # Track when we last forced a timestamp
+
+        for word in words_data:
+            word_text = getattr(word, 'text', str(word))
+            word_start = getattr(word, 'start', 0)
+            word_speaker = getattr(word, 'speaker', 'speaker_0')
+
+            # Convert to minutes for comparison
+            current_time_minutes = word_start / 60
+
+            # Check if we need to add periodic timestamp (every 15 minutes)
+            if current_time_minutes - last_forced_timestamp >= 15:
+                if current_sentence:  # Finish current sentence first
+                    speaker_text = ' '.join(current_sentence)
+                    timestamp = self._format_time(current_time)
+                    transcript_lines.append(f"[{timestamp}] {current_speaker}:")
+                    transcript_lines.append(f"{speaker_text}")
+                    transcript_lines.append("")
+                    current_sentence = []
+
+                # Add periodic timestamp marker
+                forced_timestamp = self._format_time(word_start)
+                transcript_lines.append(f"[{forced_timestamp}] [15-minute marker]")
+                transcript_lines.append("")
+                last_forced_timestamp = current_time_minutes
+
+            # Check for speaker change
+            if word_speaker != current_speaker:
+                # Finish previous speaker's sentence
+                if current_sentence and current_speaker:
+                    speaker_text = ' '.join(current_sentence)
+                    timestamp = self._format_time(current_time)
+                    transcript_lines.append(f"[{timestamp}] {current_speaker}:")
+                    transcript_lines.append(f"{speaker_text}")
+                    transcript_lines.append("")
+
+                # Start new speaker
+                current_speaker = word_speaker
+                current_time = word_start
+                current_sentence = [word_text]
+            else:
+                # Same speaker, add to current sentence
+                current_sentence.append(word_text)
+
+        # Add final sentence
+        if current_sentence and current_speaker:
+            speaker_text = ' '.join(current_sentence)
+            timestamp = self._format_time(current_time)
+            transcript_lines.append(f"[{timestamp}] {current_speaker}:")
+            transcript_lines.append(f"{speaker_text}")
+
+        return '\n'.join(transcript_lines)
+
+    def _format_time(self, seconds):
+        """Format seconds to HH:MM:SS"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        seconds = int(seconds % 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    def _format_transcript_header(self):
+        """Generate transcript header with disclaimer"""
+        return """⚠️  TRANSCRIPT DISCLAIMER ⚠️
+This transcript was generated using AI technology and may contain errors,
+inaccuracies, or misinterpretations. Please review and verify the content
+before using it for any official, legal, or critical purposes.
+Generated by: Map-Doc Automation
+═══════════════════════════════════════════════════════════════════════════
+
+"""
 
     def save_transcript(self, transcript_text, words_data, output_dir, base_filename):
         """Save transcript in multiple formats with enhanced speaker processing"""

@@ -13,7 +13,7 @@ load_dotenv()
 # Import our services
 from services.download import download_file_from_source
 from services.transcription import TranscriptionService
-from services.mapdog import MapDocService
+from services.content_generator import ContentGeneratorService
 from services.audio_service import process_audio_file, get_audio_duration
 from utils.file_utils import clean_filename, get_base_filename, is_audio_file, is_video_file, detect_file_source
 
@@ -59,9 +59,43 @@ def main():
         file_extension = ".mp4"
         file_type = "Video File"
 
+    # Get language (like valuebell-transcriber)
+    print("\nLanguage:")
+    print("1. English (en)")
+    print("2. Hebrew (he)")
+    print("3. Other (specify)")
+    language_choice = input("Select language (1, 2, or 3, default: 1): ").strip()
+
+    if language_choice == "2":
+        language = "he"
+        language_name = "Hebrew"
+    elif language_choice == "3":
+        language = input("Enter language code (e.g., es, fr, de): ").strip()
+        language_name = language
+        if not language:
+            language = "en"
+            language_name = "English"
+    else:
+        language = "en"
+        language_name = "English"
+
+    # Get number of speakers
+    print("\nNumber of speakers:")
+    num_speakers_input = input("Enter expected number of speakers (e.g., 2 for interview, 3 for panel, default: auto-detect): ").strip()
+
+    if num_speakers_input and num_speakers_input.isdigit():
+        num_speakers = int(num_speakers_input)
+        print(f"👥 Will optimize for {num_speakers} speakers")
+    else:
+        num_speakers = None
+        print("👥 Will auto-detect number of speakers")
+
     print(f"📁 Processing: {file_url}")
     print(f"📝 Episode: {episode_name}")
     print(f"🎬 File type: {file_type}")
+    print(f"🌐 Language: {language_name} ({language})")
+    if num_speakers:
+        print(f"👥 Expected speakers: {num_speakers}")
 
     try:
         # Step 1: Download file
@@ -104,7 +138,7 @@ def main():
         print("="*50)
 
         transcription_service = TranscriptionService(elevenlabs_key)
-        response = transcription_service.transcribe_audio(processed_audio)
+        response = transcription_service.transcribe_audio(processed_audio, language_code=language, num_speakers=num_speakers)
         transcript_text, words_data, response_dict = transcription_service.extract_transcription_data(response)
 
         # Analyze transcript quality
@@ -124,44 +158,70 @@ def main():
         if quality_warnings:
             print("\n".join(quality_warnings))
 
-        # Step 4: Generate map-doc
+        # Step 4: Generate comprehensive content
         print("\n" + "="*50)
-        print("STEP 4: MAP-DOC GENERATION")
+        print("STEP 4: EPISODE CONTENT GENERATION")
         print("="*50)
 
-        mapdog_service = MapDocService(gemini_key)
+        content_service = ContentGeneratorService(gemini_key)
 
-        # Get optional episode info
-        guest = input("Guest name (optional): ").strip()
-        show = input("Show name (optional): ").strip()
+        # Get enhanced episode info
+        print("Episode Information (enhanced metadata collection):")
+        show = input("Show name: ").strip()
+        host = input("Host name: ").strip()
+        guest = input("Guest name(s): ").strip()
+        episode_number = input("Episode number (optional): ").strip()
+        notes = input("Additional notes (optional): ").strip()
 
-        episode_info = {}
-        if guest:
-            episode_info['guest'] = guest
-        if show:
-            episode_info['show'] = show
+        episode_info = {
+            'show': show if show else 'Unknown Show',
+            'host': host if host else 'Unknown Host',
+            'guest': guest if guest else 'Unknown Guest',
+            'episode_number': episode_number if episode_number else 'Unknown',
+            'notes': notes if notes else 'None'
+        }
 
-        map_doc_data = mapdog_service.generate_map_doc(transcript_text, episode_info)
+        content_data = content_service.generate_content(transcript_text, episode_info, language)
 
-        # Save map-doc
-        mapdog_dir = "output/map-docs"
-        json_path, md_path = mapdog_service.save_map_doc(map_doc_data, mapdog_dir, clean_name)
+        # Save content
+        content_dir = "output/map-docs"
+        json_path, md_path = content_service.save_content(content_data, content_dir, clean_name)
 
         print("\n" + "="*50)
         print("✅ PROCESSING COMPLETE!")
         print("="*50)
         print(f"📄 Transcript: {txt_path}")
-        print(f"📋 Map-doc: {md_path}")
+        print(f"📋 Episode Content: {md_path}")
         print(f"🎤 Speakers detected: {unique_speakers_count}")
+        print(f"🌐 Language: {language_name} ({language})")
         if audio_duration:
             print(f"⏱️ Audio duration: {audio_duration/60:.1f} minutes")
 
+        # Show episode title options
+        titles = content_data.get('episode_titles', [])
+        if titles:
+            print(f"\n📝 Generated {len(titles)} title options:")
+            for i, title in enumerate(titles, 1):
+                print(f"  {i}. {title}")
+
         # Show reel suggestions
-        reels = map_doc_data.get('reels', [])
+        reels = content_data.get('reel_suggestions', [])
         if reels:
             print(f"\n🎬 Found {len(reels)} reel suggestions:")
             for i, reel in enumerate(reels, 1):
                 print(f"  {i}. {reel.get('title', 'Untitled')} ({reel.get('start_time', '00:00')} - {reel.get('end_time', '00:00')})")
+
+        # Show content warnings if any
+        warnings = content_data.get('content_warnings', [])
+        if warnings:
+            print(f"\n⚠️  Content warnings detected:")
+            for warning in warnings:
+                print(f"  - {warning}")
+
+        # Show quotable moments
+        quotes = content_data.get('quotable_moments', [])
+        if quotes:
+            print(f"\n💬 Found {len(quotes)} quotable moments for social media")
 
     except Exception as e:
         print(f"❌ Error: {str(e)}")
