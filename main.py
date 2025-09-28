@@ -46,8 +46,22 @@ def main():
     if not episode_name:
         episode_name = "untitled_episode"
 
+    # Get file type (like valuebell-transcriber)
+    print("\nFile type:")
+    print("1. Video File (.mp4)")
+    print("2. Audio File (.mp3)")
+    file_type_choice = input("Select file type (1 or 2, default: 1): ").strip()
+
+    if file_type_choice == "2":
+        file_extension = ".mp3"
+        file_type = "Audio File"
+    else:
+        file_extension = ".mp4"
+        file_type = "Video File"
+
     print(f"📁 Processing: {file_url}")
     print(f"📝 Episode: {episode_name}")
+    print(f"🎬 File type: {file_type}")
 
     try:
         # Step 1: Download file
@@ -57,8 +71,8 @@ def main():
         source_type = detect_file_source(file_url)
         print(f"🔍 Detected source: {source_type}")
 
-        # Determine file extension (or use generic)
-        download_path = f"output/downloads/{clean_name}_source"
+        # Determine file extension based on user input
+        download_path = f"output/downloads/{clean_name}_source{file_extension}"
 
         print("\n" + "="*50)
         print("STEP 1: DOWNLOADING FILE")
