@@ -107,6 +107,13 @@ def download_file_from_source(url, output_path, source_type):
     if source_type == 'drive':
         print(f"📁 Downloading from Google Drive...")
         gdown.download(url, output_path, quiet=False, fuzzy=True)
+
+        # Clean up any duplicate files without extension that gdown might create
+        base_path = os.path.splitext(output_path)[0]  # Remove extension
+        if os.path.exists(base_path) and base_path != output_path:
+            print(f"🧹 Cleaning up temporary file: {base_path}")
+            os.remove(base_path)
+
         return output_path
     elif source_type == 'dropbox':
         print(f"📁 Downloading from Dropbox...")
