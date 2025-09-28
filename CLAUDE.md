@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Map-Doc Automation Project
 
 ## Project Overview
@@ -92,3 +96,125 @@ map-doc-automation/
 4. Get your Gemini API key ready
 
 Ready to start building?
+
+---
+
+# Claude Code Technical Reference
+
+## Key Commands
+
+### Running the Application
+```bash
+python main.py
+```
+The main script runs interactively, prompting for:
+- File URL (supports Google Drive, Dropbox, WeTransfer)
+- Episode name
+- File type selection (Video .mp4 or Audio .mp3)
+- Optional guest and show information
+
+### Environment Setup
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Set up environment variables (create .env file)
+ELEVENLABS_API_KEY=your_elevenlabs_key
+GEMINI_API_KEY=your_gemini_key
+```
+
+### Testing Individual Components
+Since this is a monolithic script, test components by running the main script with different file types and sources.
+
+## Architecture Overview
+
+### Core Workflow Pipeline
+The application follows a 4-step linear pipeline:
+1. **Download**: Multi-provider file download (`services/download.py`)
+2. **Audio Processing**: Format conversion and optimization (`services/audio_service.py`)
+3. **Transcription**: ElevenLabs speech-to-text with speaker diarization (`services/transcription.py`)
+4. **Map-Doc Generation**: Gemini AI content generation (`services/mapdog.py`)
+
+### Service Layer Architecture
+- **`services/download.py`**: Handles Google Drive (gdown), Dropbox (direct conversion), and WeTransfer downloads
+- **`services/transcription.py`**: ElevenLabs integration with speaker diarization, generates TXT, SRT, and JSON outputs
+- **`services/mapdog.py`**: Gemini API client that generates structured JSON with episode metadata, reel suggestions, and social media content
+- **`services/audio_service.py`**: FFmpeg wrapper for audio/video processing and format conversion
+
+### Data Processing Architecture
+- **`processors/transcript_processor.py`**: Quality analysis, speaker grouping, and transcript enhancement
+- **`utils/file_utils.py`**: File operations, source detection, and filename handling
+- **`utils/format_utils.py`**: Timestamp formatting and output format utilities
+- **`config/settings.py`**: Application constants and configuration
+
+### Output Organization
+All outputs are organized in `output/` with subdirectories:
+- `downloads/`: Original downloaded files
+- `temp/`: Processed audio files
+- `transcripts/`: TXT, SRT, and JSON transcript files
+- `map-docs/`: Generated map-doc JSON and markdown files
+
+## Key Implementation Details
+
+### Multi-Provider Download System
+The download service auto-detects file sources and handles different authentication mechanisms:
+- Google Drive: Uses `gdown` with fuzzy matching for public URLs
+- Dropbox: Converts share URLs to direct download URLs
+- WeTransfer: Scrapes download links with session handling
+
+### ElevenLabs Integration
+Uses `scribe_v1_experimental` model with:
+- Word-level timestamps
+- Speaker diarization
+- Custom timeout handling (60s connect, 900s read)
+- Multiple output formats (TXT with speaker identification, SRT subtitles, raw JSON)
+
+### Gemini AI Map-Doc Generation
+Structured prompt engineering generates JSON with:
+- Episode metadata (title, description, summary)
+- Reel suggestions with precise timestamps
+- Social media content (Instagram, Twitter, LinkedIn)
+- Content tags and topics
+
+### Quality Analysis System
+Transcript processor analyzes:
+- Speaker detection and counting
+- Audio duration vs transcript coverage
+- Word-level confidence scoring
+- Outlier detection for poor quality segments
+
+### File Type Support
+- **Audio**: .mp3, .wav, .m4a, .aac, .flac
+- **Video**: .mp4, .avi, .mov, .mkv, .webm
+- Auto-conversion to optimal formats for transcription
+
+## Important Configuration
+
+### API Requirements
+- **ElevenLabs**: Speech-to-text transcription service
+- **Gemini**: Content generation and analysis
+
+### Audio Processing Settings
+- Default sample rate: 16kHz (optimized for speech-to-text)
+- Mono channel conversion for transcription
+- MP3 conversion for files over 1GB
+- High-quality bitrate: 320k for final outputs
+
+### SRT Subtitle Generation
+- Max cue duration: 7 seconds
+- Max characters per cue: 120
+- Speaker identification in subtitles
+
+## Development Notes
+
+### Error Handling Strategy
+The application uses a fail-fast approach with comprehensive error messages. Each major step is isolated and logged separately.
+
+### File Processing Pipeline
+Files are processed through multiple stages with intermediate outputs preserved for debugging and quality control.
+
+### Speaker Diarization
+The system groups words by speaker and formats outputs with speaker identification. Quality warnings are displayed for transcripts with unclear speaker detection.
+
+### Content Generation Prompt
+The Gemini prompt is specifically engineered for podcast content, focusing on finding 3-5 high-impact moments suitable for 30-90 second short-form content.
