@@ -42,7 +42,7 @@ class CreativeContentService:
                     temperature=0.7,   # Higher temperature for creativity
                     top_p=0.9,         # More diverse sampling
                     top_k=40,          # Broader response options
-                    max_output_tokens=3072,  # Increased buffer for Hebrew content generation
+                    max_output_tokens=6144,  # Increased for long Hebrew content
                     response_mime_type="application/json"
                 )
             )

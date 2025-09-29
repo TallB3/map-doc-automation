@@ -42,7 +42,7 @@ class HighAccuracyContentService:
                     temperature=0.05,  # Very low temperature for maximum accuracy
                     top_p=0.5,         # Focused sampling
                     top_k=10,          # Highly focused responses
-                    max_output_tokens=4096,
+                    max_output_tokens=8192,  # Increased for thinking tokens + long content
                     response_mime_type="application/json"
                 )
             )

@@ -42,12 +42,14 @@ class SimpleTasksService:
                     temperature=0.3,   # Lower temperature for consistent output
                     top_p=0.8,         # Focused but not too narrow
                     top_k=20,          # Limited options for efficiency
-                    max_output_tokens=1024,  # Smaller output for simple tasks
+                    max_output_tokens=2048,  # Increased for long content processing
                     response_mime_type="application/json"
                 )
             )
 
             # Validate response
+            if not hasattr(response, 'text') or response.text is None or response.text.strip() == "":
+                raise ValueError("Response text is None or empty - model may have been blocked by safety filters, failed to generate content, or hit token limits")
 
             # Parse response
             content_data = self._parse_json_response(response.text)

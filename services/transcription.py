@@ -117,7 +117,7 @@ class TranscriptionService:
         return txt_path, json_path
 
     def _generate_enhanced_transcript(self, words_data):
-        """Generate transcript with periodic timestamps every 15 minutes"""
+        """Generate transcript with periodic timestamps every 15 seconds"""
         if not words_data:
             return "No transcript data available"
 
@@ -125,18 +125,15 @@ class TranscriptionService:
         current_speaker = None
         current_time = None
         current_sentence = []
-        last_forced_timestamp = 0  # Track when we last forced a timestamp
+        last_forced_timestamp = 0  # Track when we last forced a timestamp (in seconds)
 
         for word in words_data:
             word_text = getattr(word, 'text', str(word))
             word_start = getattr(word, 'start', 0)
             word_speaker = getattr(word, 'speaker', 'speaker_0')
 
-            # Convert to minutes for comparison
-            current_time_minutes = word_start / 60
-
-            # Check if we need to add periodic timestamp (every 15 minutes)
-            if current_time_minutes - last_forced_timestamp >= 15:
+            # Check if we need to add periodic timestamp (every 15 seconds)
+            if word_start - last_forced_timestamp >= 15:
                 if current_sentence:  # Finish current sentence first
                     speaker_text = ' '.join(current_sentence)
                     timestamp = self._format_time(current_time)
@@ -147,9 +144,9 @@ class TranscriptionService:
 
                 # Add periodic timestamp marker
                 forced_timestamp = self._format_time(word_start)
-                transcript_lines.append(f"[{forced_timestamp}] [15-minute marker]")
+                transcript_lines.append(f"[{forced_timestamp}] [15-second marker]")
                 transcript_lines.append("")
-                last_forced_timestamp = current_time_minutes
+                last_forced_timestamp = word_start
 
             # Check for speaker change
             if word_speaker != current_speaker:
