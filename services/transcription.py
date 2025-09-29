@@ -116,6 +116,17 @@ class TranscriptionService:
 
         return txt_path, json_path
 
+    def _get_word_attr(self, word, attr, default=None):
+        """Get attribute from word object or dictionary"""
+        # Try object attribute first (for ElevenLabs API response objects)
+        if hasattr(word, attr):
+            return getattr(word, attr, default)
+        # Try dictionary access (for JSON loaded data)
+        elif isinstance(word, dict):
+            return word.get(attr, default)
+        # Fallback
+        return default
+
     def _generate_enhanced_transcript(self, words_data):
         """Generate transcript with periodic timestamps every 15 seconds"""
         if not words_data:
@@ -128,9 +139,9 @@ class TranscriptionService:
         last_forced_timestamp = 0  # Track when we last forced a timestamp (in seconds)
 
         for word in words_data:
-            word_text = getattr(word, 'text', str(word))
-            word_start = getattr(word, 'start', 0)
-            word_speaker = getattr(word, 'speaker', 'speaker_0')
+            word_text = self._get_word_attr(word, 'text', str(word))
+            word_start = self._get_word_attr(word, 'start', 0)
+            word_speaker = self._get_word_attr(word, 'speaker_id', 'speaker_0')
 
             # Check if we need to add periodic timestamp (every 15 seconds)
             if word_start - last_forced_timestamp >= 15:
@@ -148,12 +159,15 @@ class TranscriptionService:
                 transcript_lines.append("")
                 last_forced_timestamp = word_start
 
+                # Reset current_time to the current word's timestamp to ensure proper continuation
+                current_time = word_start
+
             # Check for speaker change
             if word_speaker != current_speaker:
                 # Finish previous speaker's sentence
                 if current_sentence and current_speaker:
                     speaker_text = ' '.join(current_sentence)
-                    timestamp = self._format_time(current_time)
+                    timestamp = self._format_time(current_time if current_time is not None else word_start)
                     transcript_lines.append(f"[{timestamp}] {current_speaker}:")
                     transcript_lines.append(f"{speaker_text}")
                     transcript_lines.append("")
@@ -169,7 +183,7 @@ class TranscriptionService:
         # Add final sentence
         if current_sentence and current_speaker:
             speaker_text = ' '.join(current_sentence)
-            timestamp = self._format_time(current_time)
+            timestamp = self._format_time(current_time if current_time is not None else 0)
             transcript_lines.append(f"[{timestamp}] {current_speaker}:")
             transcript_lines.append(f"{speaker_text}")
 

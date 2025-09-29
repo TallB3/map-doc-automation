@@ -134,6 +134,15 @@ def main():
 
         print(f"\n📝 Using existing transcript for: {episode_name}")
 
+        # Regenerate transcript files from existing raw data
+        print("🔄 Regenerating transcript files from existing ElevenLabs raw data...")
+        transcription_service = TranscriptionService(elevenlabs_key)
+        transcript_dir = "output/transcripts"
+        txt_path, json_path = transcription_service.save_transcript_with_timestamps(
+            transcript_text, words_data, transcript_dir, episode_name
+        )
+        print(f"✅ Regenerated transcript files based on existing raw data: {txt_path}")
+
         # Get language for content generation
         print("\nLanguage for content generation:")
         print("1. English (en)")
