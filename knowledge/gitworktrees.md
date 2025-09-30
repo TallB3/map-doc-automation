@@ -48,7 +48,7 @@ git worktree prune
 
 1. **Create a worktree for your feature**:
    ```bash
-   cd /home/tallb/dev/map-doc-automation
+   cd /home/tallb/projects/map-doc-automation
    git worktree add ../map-doc-feature-x -b feature-x
    ```
 
@@ -62,7 +62,7 @@ git worktree prune
 
 4. **When done, merge back**:
    ```bash
-   cd /home/tallb/dev/map-doc-automation  # back to main repo
+   cd /home/tallb/projects/map-doc-automation  # back to main repo
    git merge feature-x
    git worktree remove ../map-doc-feature-x
    ```
@@ -75,7 +75,7 @@ Create a bash function for easier worktree management (add to your `~/.bashrc`):
 # Worktree manager function
 w() {
     local repo_name="map-doc-automation"
-    local worktree_base="$HOME/dev/worktrees"
+    local worktree_base="$HOME/projects/worktrees"
 
     if [ $# -eq 0 ]; then
         echo "Usage: w <branch-name> [command]"
@@ -103,7 +103,7 @@ w() {
     case "$command" in
         "create")
             mkdir -p "$worktree_base"
-            cd "$HOME/dev/map-doc-automation"
+            cd "$HOME/projects/map-doc-automation"
             git worktree add "$worktree_path" -b "$branch_name"
             echo "Created worktree: $worktree_path"
             ;;
@@ -158,7 +158,7 @@ Let's say you want to work on Phase 3 (RAG implementation) while keeping your cu
 
 ### Step 1: Create Phase 3 Worktree
 ```bash
-cd /home/tallb/dev/map-doc-automation
+cd /home/tallb/projects/map-doc-automation
 git worktree add ../map-doc-phase3 -b phase3-rag-implementation
 ```
 
@@ -169,8 +169,8 @@ claude
 ```
 
 Now you have:
-- Original project at `/home/tallb/dev/map-doc-automation` (main branch)
-- Phase 3 work at `/home/tallb/dev/map-doc-phase3` (phase3-rag-implementation branch)
+- Original project at `/home/tallb/projects/map-doc-automation` (main branch)
+- Phase 3 work at `/home/tallb/projects/map-doc-phase3` (phase3-rag-implementation branch)
 - Both can run Claude Code simultaneously!
 
 ### Step 3: Parallel Development
@@ -183,7 +183,7 @@ You can now:
 ### Step 4: Integration
 When Phase 3 is ready:
 ```bash
-cd /home/tallb/dev/map-doc-automation
+cd /home/tallb/projects/map-doc-automation
 git merge phase3-rag-implementation
 git worktree remove ../map-doc-phase3
 git branch -d phase3-rag-implementation  # Clean up branch if desired
@@ -191,7 +191,7 @@ git branch -d phase3-rag-implementation  # Clean up branch if desired
 
 ## Best Practices
 
-1. **Organize worktrees**: Use a consistent directory structure like `~/dev/worktrees/`
+1. **Organize worktrees**: Use a consistent directory structure like `~/projects/worktrees/`
 2. **Name branches clearly**: `feature-x`, `hotfix-y`, `experiment-z`
 3. **Limit active worktrees**: Keep 2-3 active to avoid confusion
 4. **Clean up regularly**: Remove worktrees when features are merged
