@@ -131,9 +131,124 @@
 
 ---
 
+### ⏳ Phase 0.5: Chain Prompting Experiment (NEW - INSERTED 2025-10-02)
+**Goal**: Test if separating tasks into individual API calls improves accuracy BEFORE building full RAG system
+**Status**: IN PROGRESS
+**Duration**: 1-2 sessions
+**Approach**: Create new experimental service alongside existing one for A/B comparison
+
+**Rationale**: Test simpler hypothesis first - maybe the issue isn't the 6000 token context itself, but trying to do ALL tasks (quotes + reels + chapters + warnings) in ONE call. Separating tasks could dramatically reduce cognitive load without needing full RAG architecture.
+
+#### 0.5.1 Update Documentation
+**Task**: Insert Phase 0.5 into roadmap and document experiment rationale
+**Status**: ✅ COMPLETE
+
+#### 0.5.2 Create Experimental Chain Prompting Service
+**File**: `services/accuracy_service_chain_prompting.py`
+**Approach**: TDD with @agent-tdd-enforcer
+
+**Interface** (matches original for easy swapping):
+```python
+class ChainPromptingAccuracyService:
+    def generate_accuracy_critical_content(transcript_text, episode_info, language):
+        """Same interface as HighAccuracyContentService for easy A/B testing"""
+```
+
+**Internal Methods** (each = separate focused API call):
+- `_generate_quotable_moments()` - One focused call for quotes only
+- `_generate_reel_suggestions()` - One focused call for reels only
+- `_generate_content_warnings()` - One focused call for warnings only
+- `_generate_chapter_timestamps()` - **TWO-STEP CHAIN**:
+  1. API Call 1: Get chapter titles WITHOUT timestamps (JSON array of titles)
+  2. Loop: For each title → API Call to find SPECIFIC timestamp for that chapter
+
+**Why Two-Step Chain for Chapters?**
+```
+Instead of: "Find all chapters with timestamps in 6000 token context"
+Do this:
+  Step 1: "What are the main chapter topics?"
+    → ["החידלון הרעיוני", "משל הצוללת", "שלושת הרעיונות המתים"]
+
+  Step 2a: "Find timestamp where 'החידלון הרעיוני' begins"
+  Step 2b: "Find timestamp where 'משל הצוללת' begins"
+  Step 2c: "Find timestamp where 'שלושת הרעיונות המתים' begins"
+```
+This gives Gemini a **focused search task** instead of "find everything at once".
+
+**Tests to Write FIRST**:
+```python
+def test_each_task_uses_separate_api_call()
+def test_quotable_moments_call_is_independent()
+def test_reel_suggestions_call_is_independent()
+def test_chapter_generation_is_two_step_chain()
+def test_chapter_step1_returns_titles_without_timestamps()
+def test_chapter_step2_finds_timestamp_for_specific_title()
+def test_timestamps_accurate_for_quotes_at_3min()
+def test_timestamps_accurate_for_quotes_at_15min()
+def test_timestamps_accurate_for_quotes_at_40min()
+```
+
+**Status**: ⏳ PENDING
+
+#### 0.5.3 Add A/B Testing Flag to Orchestrator
+**File**: `services/content_orchestrator.py`
+
+**Changes**:
+- Add parameter: `use_chain_prompting=False` (default to original for safety)
+- If True → instantiate and use `ChainPromptingAccuracyService`
+- If False → use original `HighAccuracyContentService`
+
+**Purpose**: Allows running BOTH services on same transcript for direct comparison.
+
+**Status**: ⏳ PENDING
+
+#### 0.5.4 Manual Testing & Verification
+**Goal**: A/B test both services on real 30+ minute transcript
+
+**Test Data Points** (manually verify):
+- Quote at ~3 minutes (where Gemini starts degrading)
+- Quote at ~8 minutes
+- Quote at ~15 minutes (medium difficulty)
+- Quote at ~25 minutes (hard)
+- Quote/reel at ~40+ minutes (critical - worst accuracy zone)
+- 2 chapter timestamps from mid/late episode
+
+**Comparison Metrics**:
+- Timestamp accuracy (within 5 seconds = pass)
+- Quote exact match (word-for-word = pass)
+- Old service vs New service side-by-side
+
+**Document in**: PROGRESS.md under "Phase 0.5 Results"
+
+**Status**: ⏳ PENDING
+
+#### 0.5.5 Decision Point
+
+**Measure**: Timestamp accuracy across different time ranges
+
+**Outcome 1 - SUCCESS (90%+ accuracy across full episode)**:
+- ✅ Ship it! Update orchestrator to default `use_chain_prompting=True`
+- ✅ Defer RAG to future enhancement (if ever needed)
+- ✅ Document findings: Task separation solved the problem
+
+**Outcome 2 - PARTIAL IMPROVEMENT (works 0-10min, still fails 15min+)**:
+- ✅ Document findings: Task separation helps but insufficient for long context
+- ✅ Proves reducing cognitive load per call improves accuracy
+- ✅ Proceed to Phase 1 (RAG) knowing we need chunked retrieval
+- ✅ Consider: Combine chain prompting + RAG for best results
+
+**Outcome 3 - NO IMPROVEMENT**:
+- ✅ Delete experimental file
+- ✅ Proceed to Phase 1 (RAG) - confirms long context is the core issue
+- ✅ Document: Task separation alone insufficient
+
+**Status**: ⏳ PENDING
+
+---
+
 ### ⏳ Phase 1: RAG-Based Chunked Retrieval System
-**Goal**: Prevent errors by giving Gemini focused context
-**Status**: PENDING
+**Goal**: Prevent errors by giving Gemini focused context through vector retrieval
+**Status**: PENDING (may be skipped if Phase 0.5 succeeds)
 **Duration**: 2-3 sessions
 **Approach**: TDD with @agent-tdd-enforcer throughout
 

@@ -5,17 +5,33 @@ Implements Phase 2 multi-service architecture with cost optimization
 import os
 import json
 from .accuracy_service import HighAccuracyContentService
+from .accuracy_service_chain_prompting import ChainPromptingAccuracyService
 from .creative_service import CreativeContentService
 from .simple_tasks_service import SimpleTasksService
 
 class ContentOrchestrator:
     """Orchestrates multiple content generation services for optimal cost and accuracy"""
 
-    def __init__(self, api_key):
-        """Initialize all content generation services"""
-        self.accuracy_service = HighAccuracyContentService(api_key)
+    def __init__(self, api_key, use_chain_prompting=False):
+        """
+        Initialize all content generation services
+
+        Args:
+            api_key: Gemini API key
+            use_chain_prompting: If True, use experimental ChainPromptingAccuracyService
+                               If False (default), use original HighAccuracyContentService
+        """
+        # Choose accuracy service based on flag (Phase 0.5 A/B testing)
+        if use_chain_prompting:
+            self.accuracy_service = ChainPromptingAccuracyService(api_key)
+            print("🔗 Using Chain Prompting Accuracy Service (Phase 0.5 Experiment)")
+        else:
+            self.accuracy_service = HighAccuracyContentService(api_key)
+            print("🎯 Using Original High Accuracy Service")
+
         self.creative_service = CreativeContentService(api_key)
         self.simple_service = SimpleTasksService(api_key)
+        self.use_chain_prompting = use_chain_prompting
 
     def generate_comprehensive_content(self, transcript_text, episode_info=None, language="en"):
         """
@@ -126,16 +142,18 @@ class ContentOrchestrator:
             print("✅ All services completed successfully")
 
         # Add generation metadata
+        accuracy_service_name = "Chain Prompting (Phase 0.5 Experiment)" if self.use_chain_prompting else "Gemini 2.5 Pro + Thinking"
         results["generation_metadata"] = {
-            "phase": "Phase 2 - Multi-Service Architecture",
+            "phase": "Phase 2 - Multi-Service Architecture" + (" + Phase 0.5 Chain Prompting" if self.use_chain_prompting else ""),
             "services_used": {
-                "accuracy": "Gemini 2.5 Pro + Thinking",
+                "accuracy": accuracy_service_name,
                 "creative": "Gemini 2.5 Flash",
                 "simple": "Gemini 2.5 Flash (Efficient)",
                 "formatting": "Local Processing"
             },
             "cost_optimization": "~75% cost reduction vs single Pro model",
-            "language": language
+            "language": language,
+            "chain_prompting_enabled": self.use_chain_prompting
         }
 
         print(f"\n🎉 Phase 2 content generation completed!")
